@@ -11,6 +11,14 @@ class InvalidMoveTypeError(MoveError):
         super().__init__(self.message)
 
 
+class MoveOutOfBoundsError(MoveError):
+    """Exception raised if user's move exceeds bounds of gamepole"""
+
+    def __init__(self, *args) -> None:
+        self.message = "Слишком большие числа."
+        super().__init__(self.message)
+
+
 class CellIsUsedError(MoveError):
     """Exception raised if user tries to use already used cell"""
 

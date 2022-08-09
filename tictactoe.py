@@ -1,5 +1,5 @@
 from my_exceptions import (InvalidMoveTypeError, CellIsUsedError,
-                           EnemyTurnError)
+                           EnemyTurnError, MoveOutOfBoundsError)
 
 
 class Player:
@@ -76,10 +76,15 @@ class Game:
         self.draw = self.gamepole.check_draw()
 
     def __validate_move(self, user_id: int, move: str):
+        self.__check_turn(user_id)
         self.__validate_move_type(move)
         y, x = map(int, list(move))
+        self.__validate_move_bounds(x, y)
         self.__validate_cell_availability(x, y)
-        self.__check_turn(user_id)
+
+    def __validate_move_bounds(self, x: int, y: int):
+        if not all([0 <= x <= 2, 0 <= y <= 2]):
+            raise MoveOutOfBoundsError
 
     def __validate_move_type(self, move: str):
         if len(move) != 2 or not move.isdigit():

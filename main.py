@@ -23,13 +23,11 @@ back = Back(DBInterface(db), bot)
 @bot.message_handler(commands=["play"])
 def handle_play(message):
     back.register_user(message.from_user.id)
-    bot.send_message(message.from_user.id, "Начинаем поиск.")
 
 
 @bot.message_handler(commands=["stop"])
 def handle_stop(message):
-    back.notify_stop(message.from_user.id)
-    back.unregister_user(message.from_user.id)
+    back.user_interrupt(message.from_user.id)
 
 
 @bot.message_handler()
@@ -38,8 +36,14 @@ def handle_messages(message):
 
     if back.user_is_playing(user_id):
         back.user_move(user_id, message.text)
-        back.notify_move(user_id)
         back.check_game_for_end(user_id)
+    else:
+        bot.send_message(
+            message.from_user.id,
+            """
+Я не умею отвечать на сообщения. Если хочешь поиграть - пиши /play.
+            """
+            )
 
 
 def do_start_ready_users():

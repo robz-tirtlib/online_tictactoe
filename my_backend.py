@@ -1,6 +1,9 @@
 from typing import List
 
-from tictactoe import Game
+from tictactoe import Game, GamePole
+
+from my_exceptions import (InvalidMoveTypeError, CellIsUsedError,
+                           EnemyTurnError, MoveOutOfBoundsError)
 
 
 class DBInterface:
@@ -25,6 +28,9 @@ class DBInterface:
     def get_playing_users_ids(self) -> List[int]:
         return [int(key.split(':')[0]) for key in self.db.keys("*:playing")]
 
+    def get_ready_users_ids(self) -> List[int]:
+        return [int(key.split(':')[0]) for key in self.db.keys("*:ready")]
+
     def get_user_partner(self, user_id: int) -> int:
         return int(self.db.get(f"{user_id}:playing"))
 
@@ -39,36 +45,19 @@ class DBInterface:
         return player1, player2
 
 
-class Back:
+class Notifier:
 
-    def __init__(self, dbi: DBInterface, bot) -> None:
-        self.dbi = dbi
-        self.games = {}
+    def __init__(self, bot):
         self.bot = bot
 
-    def register_user(self, user_id: int):
-        if user_id not in self.dbi.get_playing_users_ids():
-            self.dbi.add_user(user_id)
-
-    def start_ready_users(self):
-        while self.dbi.ready_users_count() > 1:
-            player1, player2 = self.dbi.get_pair_delete()
-
-            self.start_pair(player1, player2)
-
-            for user in player1, player2:
-                self.notify_start(user)
-
-            self.create_game(player1, player2)
-
-    def start_pair(self, user1_id: int, user2_id: int):
-        self.dbi.change_state_user(user1_id, user2_id)
-        self.dbi.change_state_user(user2_id, user1_id)
-
-    def notify_start(self, user_id: int):
+    def notify_start(self, user_id: int, partner: int):
         self.bot.send_message(
             user_id,
-            f"Игра началась. Напарник - {self.get_user_partner(user_id)}")
+            f"Игра началась. Напарник - {partner}")
+
+        self.bot.send_message(
+            partner,
+            f"Игра началась. Напарник - {user_id}")
 
     def notify_end(self, game: Game, draw: bool, game_winner):
         player1, player2 = game.players
@@ -83,20 +72,63 @@ class Back:
         self.bot.send_message(game_winner, "Игра окончена. Вы победили.")
         self.bot.send_message(game_loser, "Игра окончена. Вы проиграли.")
 
-    def notify_move(self, user_id: int):
-        for user in user_id, self.get_user_partner(user_id):
-            self.bot.send_message(user, self.get_pole(user_id))
+    def notify_move(self, user_id: int, partner: int, pole: GamePole):
+        for user in user_id, partner:
+            self.bot.send_message(user, pole)
 
     def notify_stop(self, user_id: int):
-        partner = self.get_user_partner(user_id)
-
         self.bot.send_message(user_id, "Игра прервана.")
-        self.bot.send_message(partner, "Игра прервана соперником.")
 
+    def notify_user_in_queue(self, user_id: int):
+        self.bot.send_message(user_id, "Вы в очереди.")
+
+    def notify_user_is_playing(self, user_id: int, partner: int):
+        self.bot.send_message(
+            user_id,
+            f"Вы в игре с {partner}"
+            )
+
+    def notify_move_error(self, user_id: int, error: str):
+        self.bot.send_message(user_id, error)
+
+
+class Back:
+
+    def __init__(self, dbi: DBInterface, bot) -> None:
+        self.dbi = dbi
+        self.games = {}
+        self.notifier = Notifier(bot)
+
+    def register_user(self, user_id: int):
+        """Add user to queue if he is not playing and notify state"""
+
+        if self.user_is_ready(user_id):
+            self.notifier.notify_user_in_queue(user_id)
+        elif self.user_is_playing(user_id):
+            self.notifier.notify_user_is_playing(
+                user_id,
+                self.get_user_partner(user_id)
+                )
+        else:
+            self.dbi.add_user(user_id)
+            self.notifier.notify_user_in_queue(user_id)
+
+    def start_ready_users(self):
+        while self.dbi.ready_users_count() > 1:
+            player1, player2 = self.dbi.get_pair_delete()
+
+            self.start_pair(player1, player2)
+
+            self.notifier.notify_start(player1, player2)
+
+            self.create_game(player1, player2)
+
+    def start_pair(self, user1_id: int, user2_id: int):
+        self.dbi.change_state_user(user1_id, user2_id)
+        self.dbi.change_state_user(user2_id, user1_id)
+
+#######
     def unregister_user(self, user_id: int):
-        if self.user_is_playing(user_id):
-            partner = self.dbi.get_user_partner(user_id)
-            self.dbi.remove_user(partner)
         self.dbi.remove_user(user_id)
 
     def create_game(self, user1_id: int, user2_id: int):
@@ -107,6 +139,14 @@ class Back:
         del self.games[f"{user1_id}:{user2_id}"]
         del self.games[f"{user2_id}:{user1_id}"]
 
+    def user_interrupt(self, user_id: int):
+        if self.user_is_playing(user_id):
+            partner = self.get_user_partner(user_id)
+            self.notifier.notify_stop(partner)
+            self.unregister_user(partner)
+        self.notifier.notify_stop(user_id)
+        self.unregister_user(user_id)
+
     def check_game_for_end(self, user_id: int):
         game = self.game_by_user_id(user_id)
 
@@ -114,16 +154,29 @@ class Back:
             return
 
         if game.winner is not None:
-            self.notify_end(game, False, game.winner)
+            self.notifier.notify_end(game, False, game.winner)
         else:
-            self.notify_end(game, True, None)
+            self.notifier.notify_end(game, True, None)
 
-        self.delete_game(user_id, self.get_user_partner(user_id))
+        partner = self.get_user_partner(user_id)
+        self.delete_game(user_id, partner)
         self.unregister_user(user_id)
+        self.unregister_user(partner)
 
     def user_move(self, user_id: int, move: str):
         game = self.game_by_user_id(user_id)
-        game.move(user_id, move)
+
+        try:
+            game.move(user_id, move)
+        except (InvalidMoveTypeError, CellIsUsedError,
+                EnemyTurnError, MoveOutOfBoundsError) as error:
+            self.notifier.notify_move_error(user_id, error)
+        else:
+            self.notifier.notify_move(
+                user_id,
+                self.get_user_partner(user_id),
+                self.get_pole(user_id)
+                )
 
     def game_by_user_id(self, user_id: int) -> Game:
         for pair, game in self.games.items():
@@ -139,3 +192,6 @@ class Back:
 
     def user_is_playing(self, user_id: int):
         return user_id in self.dbi.get_playing_users_ids()
+
+    def user_is_ready(self, user_id: int):
+        return user_id in self.dbi.get_ready_users_ids()
