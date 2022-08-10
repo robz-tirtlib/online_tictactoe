@@ -15,7 +15,12 @@ class GamePole:
         self.init_pole()
 
     def init_pole(self):
-        self.pole = [['_' for i in range(3)] for j in range(3)]
+        self.pole = [
+            ['.', '1', '2', '3'],
+            ['1', '_', '_', '_'],
+            ['2', '_', '_', '_'],
+            ['3', '_', '_', '_'],
+        ]
 
     def get_pole(self):
         return '\n'.join([' '.join(row) for row in self.pole])
@@ -29,16 +34,16 @@ class GamePole:
             sign = player.sign
 
             # rows and cols
-            for i in range(3):
-                if (self.pole[i][0] == self.pole[i][1] == self.pole[i][2] == sign or
-                        self.pole[0][i] == self.pole[1][i] == self.pole[2][i] == sign):
+            for i in range(1, 4):
+                if (self.pole[i][1] == self.pole[i][2] == self.pole[i][3] == sign or
+                        self.pole[1][i] == self.pole[2][i] == self.pole[3][i] == sign):
                     return player.id
 
             # diagonals
-            if self.pole[0][0] == self.pole[1][1] == self.pole[2][2] == sign:
+            if self.pole[1][1] == self.pole[2][2] == self.pole[3][3] == sign:
                 return player.id
 
-            if self.pole[0][2] == self.pole[1][1] == self.pole[2][0] == sign:
+            if self.pole[1][3] == self.pole[2][2] == self.pole[3][1] == sign:
                 return player.id
 
         return None
@@ -83,7 +88,7 @@ class Game:
         self.__validate_cell_availability(x, y)
 
     def __validate_move_bounds(self, x: int, y: int):
-        if not all([0 <= x <= 2, 0 <= y <= 2]):
+        if not all([1 <= x <= 3, 1 <= y <= 3]):
             raise MoveOutOfBoundsError
 
     def __validate_move_type(self, move: str):

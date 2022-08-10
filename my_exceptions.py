@@ -15,7 +15,7 @@ class MoveOutOfBoundsError(MoveError):
     """Exception raised if user's move exceeds bounds of gamepole"""
 
     def __init__(self, *args) -> None:
-        self.message = "Слишком большие числа."
+        self.message = "Введены координаты не существующей клетки."
         super().__init__(self.message)
 
 

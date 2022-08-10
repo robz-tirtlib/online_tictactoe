@@ -30,13 +30,24 @@ def handle_stop(message):
     back.user_interrupt(message.from_user.id)
 
 
+@bot.message_handler(commands=["help"])
+def handle_help(message):
+    bot.send_message(
+        message.from_user.id,
+        """
+Чтобы начать игру - напиши /play.
+Чтобы сделать ход напишите номер строки и номер столба.
+Например, так: 11.
+        """
+        )
+
+
 @bot.message_handler()
 def handle_messages(message):
     user_id = message.from_user.id
 
     if back.user_is_playing(user_id):
         back.user_move(user_id, message.text)
-        back.check_game_for_end(user_id)
     else:
         bot.send_message(
             message.from_user.id,
